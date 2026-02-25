@@ -1,0 +1,13 @@
+# Python Environment
+.venv/
+__pycache__/
+
+# Data Files & Charts
+*.csv
+*.xlsx
+*.xls
+*.xlsb
+chart.png
+
+# Hidden Secrets Vault
+.streamlit/
