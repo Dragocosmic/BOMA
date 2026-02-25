@@ -1,34 +1,41 @@
 import streamlit as st
-import os  # NEW: Allows Streamlit to read files on your computer
+import os
 from brain import get_active_model
 from tools import process_uploaded_file, search_the_web, run_data_agent
 
-st.set_page_config(page_title="Boma - Industrial Agent", page_icon="🏭", layout="wide")
+# 1. Page Configuration
+st.set_page_config(page_title="Boma - Agent", page_icon="🏭", layout="wide")
 
+# 2. Initialize Chat History
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": "System Modularized. I am ready to analyze, modify, and visualize your data!"}]
 
+# 3. Sidebar: Settings & File Upload
 with st.sidebar:
     st.title("⚙️ System Settings")
-    # Clean, simple model selector (Gemini-style)
+    
+    # Clean Model Selector
     model_choice = st.selectbox("Select Model", ["Groq (Cloud)", "Ollama (Local)"])
     
-    # Securely fetch the API key from the hidden vault
+    # Secure API Key Retrieval
+    api_key = ""
     if model_choice == "Groq (Cloud)":
         try:
-            api_key = st.secrets["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"]
+            # Looks for the name 'GROQ_API_KEY' in your secrets.toml or Cloud dashboard
+            api_key = st.secrets["GROQ_API_KEY"]
         except Exception:
-            api_key = ""
-            st.error("API Key missing! Please add it to Streamlit Secrets.")
-    else:
-        api_key = ""
-
+            st.error("API Key missing! Please add 'GROQ_API_KEY' to your Streamlit Secrets.")
+    
+    # File Uploader
     uploaded_file = st.file_uploader("Upload Machine Logs", type=["csv", "xlsx", "xls", "xlsb"])
     
+    # Initialize the "Brain"
     llm = get_active_model(model_choice, api_key)
-    
-st.title("🤖 Boma: Industrial AI Agent")
 
+# 4. Main UI Header
+st.title("🤖 Boma: AI Agent")
+
+# 5. Data Processing Logic
 dataset_context = ""
 df = None
 if uploaded_file:
@@ -39,10 +46,15 @@ if uploaded_file:
     else:
         st.error(dataset_context)
 
+# 6. Display Chat History (Including persistent charts)
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
+        # If the message has a saved chart, show it
+        if msg.get("has_chart") and os.path.exists("chart.png"):
+            st.image("chart.png")
 
+# 7. Chat Input & Tool Routing
 if prompt := st.chat_input("Type a command..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -55,9 +67,7 @@ if prompt := st.chat_input("Type a command..."):
             with st.spinner("Processing..."):
                 extra_context = dataset_context if dataset_context else ""
                 
-                # --- TOOL ROUTER ---
-                
-                # Route 1: Internet Search
+                # --- ROUTE 1: INTERNET SEARCH ---
                 if "search" in prompt.lower() or "internet" in prompt.lower():
                     st.info("🌐 Boma is searching the web...")
                     web_results = search_the_web(prompt)
@@ -72,26 +82,26 @@ if prompt := st.chat_input("Type a command..."):
                     except Exception as e:
                         st.error(f"Error: {e}")
 
-                # Route 2: Data Execution (ETL & Charts)
-                # UPGRADED: Added chart trigger words
-                elif df is not None and any(word in prompt.lower() for word in ["data", "sheet", "excel", "column", "filter", "plot", "chart", "graph", "visualize"]):
-                    st.info("📊 Boma is writing and executing Python code...")
+                # --- ROUTE 2: DATA EXECUTION (ETL & CHARTS) ---
+                elif df is not None and any(word in prompt.lower() for word in ["data", "sheet", "excel", "plot", "chart", "graph", "visualize"]):
+                    st.info("📊 Boma is executing Python analysis...")
                     
-                    # 1. Clean up any old charts before starting
+                    # Clean old charts
                     if os.path.exists("chart.png"):
                         os.remove("chart.png")
 
-                    # 2. Run the agent
+                    # Run Data Agent
                     agent_result = run_data_agent(df, prompt, llm)
                     st.markdown(agent_result)
-                    st.session_state.messages.append({"role": "assistant", "content": agent_result})
                     
-                    # 3. NEW: If a chart was created, display it!
+                    # Check for chart and update history
                     if os.path.exists("chart.png"):
                         st.image("chart.png")
-                        st.success("Chart generated and displayed successfully!")
+                        st.session_state.messages.append({"role": "assistant", "content": agent_result, "has_chart": True})
+                    else:
+                        st.session_state.messages.append({"role": "assistant", "content": agent_result})
 
-                # Route 3: Standard Chat
+                # --- ROUTE 3: STANDARD CHAT ---
                 else:
                     final_prompt = f"CONTEXT:\n{extra_context}\n\nUSER QUESTION: {prompt}" if extra_context else prompt
                     try:
