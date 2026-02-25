@@ -3,7 +3,7 @@ from duckduckgo_search import DDGS
 from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
 
 def process_uploaded_file(uploaded_file):
-    """Reads CSV or Excel and generates text context for the AI."""
+    """Reads CSV, Excel, or XLSB and generates text context for the AI."""
     try:
         file_ext = uploaded_file.name.split('.')[-1].lower()
         
@@ -25,33 +25,43 @@ def process_uploaded_file(uploaded_file):
 def search_the_web(query):
     """Searches the internet using DuckDuckGo."""
     try:
-        results = DDGS().text(query, max_results=3)
-        if not results:
-            return "No results found on the web."
-        
-        context = "WEB SEARCH RESULTS:\n"
-        for i, r in enumerate(results):
-            context += f"{i+1}. {r['title']}: {r['body']}\n"
-        return context
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=3))
+            if not results:
+                return "No results found on the web."
+            
+            context = "WEB SEARCH RESULTS:\n"
+            for i, r in enumerate(results):
+                context += f"{i+1}. {r['title']}: {r['body']}\n"
+            return context
     except Exception as e:
         return f"Web search failed: {e}"
 
-# --- THE DATA EXECUTION AGENT ---
 def run_data_agent(df, query, llm):
     """Gives the AI an execution engine to run Pandas code directly."""
     try:
-        # THE FIX: We secretly attach a rule to stop the Streamlit chart freezing!
-        safe_query = query + "\n\nCRITICAL RULE: If the user asks you to plot, graph, or draw a chart, you MUST save it as 'chart.png' in the current directory using plt.savefig('chart.png') or fig.write_image('chart.png'). DO NOT use plt.show() or fig.show()."
+        # Rule to ensure Streamlit chart generation works
+        safe_query = (
+            f"{query}\n\n"
+            "CRITICAL RULES:\n"
+            "1. If you create a plot/graph, you MUST save it as 'chart.png' using plt.savefig('chart.png').\n"
+            "2. DO NOT use plt.show().\n"
+            "3. Use a clean style and ensure labels are legible."
+        )
         
+        # 'handle_parsing_errors' removed to silence the UserWarning
         agent = create_pandas_dataframe_agent(
             llm,
             df,
             verbose=True,
-            allow_dangerous_code=True,
-            handle_parsing_errors=True
+            allow_dangerous_code=True
         )
         
         response = agent.invoke(safe_query)
-        return response.get("output", "Operation completed.")
+        
+        if isinstance(response, dict):
+            return response.get("output", "Operation completed.")
+        return str(response)
+        
     except Exception as e:
         return f"Execution failed: {e}"

@@ -4,7 +4,7 @@ from brain import get_active_model
 from tools import process_uploaded_file, search_the_web, run_data_agent
 
 # 1. Page Configuration
-st.set_page_config(page_title="Boma - Agent", page_icon="🏭", layout="wide")
+st.set_page_config(page_title="Boma - Industrial Agent", page_icon="🏭", layout="wide")
 
 # 2. Initialize Chat History
 if "messages" not in st.session_state:
@@ -21,7 +21,6 @@ with st.sidebar:
     api_key = ""
     if model_choice == "Groq (Cloud)":
         try:
-            # Looks for the name 'GROQ_API_KEY' in your secrets.toml or Cloud dashboard
             api_key = st.secrets["GROQ_API_KEY"]
         except Exception:
             st.error("API Key missing! Please add 'GROQ_API_KEY' to your Streamlit Secrets.")
@@ -46,13 +45,22 @@ if uploaded_file:
     else:
         st.error(dataset_context)
 
-# 6. Display Chat History (Including persistent charts)
-for msg in st.session_state.messages:
+# 6. Display Chat History (Persistent Charts & Buttons)
+for i, msg in enumerate(st.session_state.messages):
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
-        # If the message has a saved chart, show it
+        
+        # Keep the chart and download button visible in history
         if msg.get("has_chart") and os.path.exists("chart.png"):
             st.image("chart.png")
+            with open("chart.png", "rb") as file:
+                st.download_button(
+                    label="💾 Download Chart",
+                    data=file,
+                    file_name=f"boma_chart_{i}.png",
+                    mime="image/png",
+                    key=f"hist_dl_{i}" 
+                )
 
 # 7. Chat Input & Tool Routing
 if prompt := st.chat_input("Type a command..."):
@@ -86,17 +94,25 @@ if prompt := st.chat_input("Type a command..."):
                 elif df is not None and any(word in prompt.lower() for word in ["data", "sheet", "excel", "plot", "chart", "graph", "visualize"]):
                     st.info("📊 Boma is executing Python analysis...")
                     
-                    # Clean old charts
                     if os.path.exists("chart.png"):
                         os.remove("chart.png")
 
-                    # Run Data Agent
                     agent_result = run_data_agent(df, prompt, llm)
                     st.markdown(agent_result)
                     
-                    # Check for chart and update history
                     if os.path.exists("chart.png"):
                         st.image("chart.png")
+                        
+                        # Real-time Download Button
+                        with open("chart.png", "rb") as file:
+                            st.download_button(
+                                label="💾 Download Chart",
+                                data=file,
+                                file_name="boma_analysis.png",
+                                mime="image/png",
+                                key=f"new_dl_{len(st.session_state.messages)}"
+                            )
+                        
                         st.session_state.messages.append({"role": "assistant", "content": agent_result, "has_chart": True})
                     else:
                         st.session_state.messages.append({"role": "assistant", "content": agent_result})
