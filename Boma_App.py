@@ -16,7 +16,7 @@ with st.sidebar:
     # Securely fetch the API key from the hidden vault
     if model_choice == "Groq (Cloud)":
         try:
-            api_key = st.secrets["GROQ_API_KEY"]
+            api_key = st.secrets["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"]
         except Exception:
             api_key = ""
             st.error("API Key missing! Please add it to Streamlit Secrets.")
